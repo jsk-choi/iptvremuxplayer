@@ -3,17 +3,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const FFMPEG_PATH = (() => {
-  const candidates = [
-    'C:\\Program Files\\ffmpeg\\ffmpeg.exe',
-    'C:\\ffmpeg\\bin\\ffmpeg.exe',
-  ];
-  for (const c of candidates) {
-    try { if (fs.existsSync(c)) return c; } catch (_) {}
-  }
-  return 'ffmpeg';
-})();
-console.log('Using ffmpeg:', FFMPEG_PATH);
+const FFMPEG_PATH = process.env.FFMPEG_PATH || 'C:\\Program Files\\ffmpeg\\ffmpeg.exe';
 
 const HLS_DIR      = path.join(__dirname, 'hls-temp');
 const PLAYLIST_FILE = path.join(__dirname, 'saved-playlist.m3u');

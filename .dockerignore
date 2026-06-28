@@ -1,0 +1,7 @@
+node_modules
+hls-temp
+.git
+.claude
+scripts
+*.m3u
+*.m3u8
