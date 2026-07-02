@@ -1,0 +1,20 @@
+services:
+  iptvremuxplayer:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./saved-playlist.m3u:/app/saved-playlist.m3u
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=video,compute,utility
+      # Set TRANSCODE_GPU=1 to decode+encode via NVENC instead of bitstream copy
+      # - TRANSCODE_GPU=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video]
+    restart: unless-stopped

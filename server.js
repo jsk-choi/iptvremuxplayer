@@ -3,7 +3,8 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const FFMPEG_PATH = process.env.FFMPEG_PATH || 'C:\\Program Files\\ffmpeg\\ffmpeg.exe';
+const FFMPEG_PATH  = process.env.FFMPEG_PATH || 'C:\\Program Files\\ffmpeg\\ffmpeg.exe';
+const TRANSCODE_GPU = process.env.TRANSCODE_GPU === '1' || process.env.TRANSCODE_GPU === 'true';
 
 const HLS_DIR      = path.join(__dirname, 'hls-temp');
 const PLAYLIST_FILE = path.join(__dirname, 'saved-playlist.m3u');
@@ -98,9 +99,10 @@ app.post('/api/play', (req, res) => {
     '-reconnect_streamed', '1',
     '-reconnect_at_eof', '1',
     '-reconnect_delay_max', '5',
+    ...(TRANSCODE_GPU ? ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'] : []),
     '-fflags', '+genpts+discardcorrupt',
     '-i', url,
-    '-c', 'copy',
+    ...(TRANSCODE_GPU ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-c:a', 'copy'] : ['-c', 'copy']),
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_flags', 'delete_segments+omit_endlist',
@@ -112,7 +114,7 @@ app.post('/api/play', (req, res) => {
   const proc = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'ignore', 'pipe'] });
   ffmpegProc = proc;
 
-  proc.stderr.on('data', d => process.stderr.write(d));
+  proc.stderr.pipe(process.stderr);
 
   proc.on('error', err => {
     console.error('ffmpeg error:', err.message);
@@ -121,7 +123,7 @@ app.post('/api/play', (req, res) => {
   });
 
   proc.on('exit', code => {
-    console.log('ffmpeg exit:', code);
+    if (code !== 0 && code !== null) console.warn(`ffmpeg exited with code ${code}`);
     if (!res.headersSent) res.status(500).json({ error: `ffmpeg exited (code ${code})` });
     if (ffmpegProc === proc) ffmpegProc = null;
   });

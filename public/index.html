@@ -143,7 +143,43 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  transition: width .2s ease, min-width .2s ease, border-color .2s ease;
 }
+#sidebar.hidden {
+  width: 0;
+  min-width: 0;
+  border-right-color: transparent;
+}
+
+#btn-toggle-sidebar {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: .72rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  flex-shrink: 0;
+}
+#btn-toggle-sidebar:hover { color: var(--text); border-color: var(--accent); }
+
+#btn-sidebar-show {
+  display: none;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: .72rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+#btn-sidebar-show:hover { color: var(--text); border-color: var(--accent); }
 
 #sidebar-top {
   padding: 14px 14px 10px;
@@ -420,7 +456,10 @@ body {
     <div id="sidebar-top">
       <div class="sidebar-bar">
         <div class="wordmark" style="font-size:1rem">IPTV<em>Remux</em></div>
-        <button id="btn-reload">↑ Load new</button>
+        <div style="display:flex;gap:6px">
+          <button id="btn-toggle-sidebar" title="Hide sidebar">◀</button>
+          <button id="btn-reload">↑ Load new</button>
+        </div>
       </div>
       <input type="search" id="search" placeholder="Search channels…">
       <div id="channel-count"></div>
@@ -430,6 +469,7 @@ body {
 
   <main id="main">
     <div id="video-wrap">
+      <button id="btn-sidebar-show" title="Show sidebar">▶</button>
       <video id="video" controls></video>
 
       <div class="overlay show" id="idle-overlay">
@@ -509,6 +549,15 @@ dropZone.addEventListener('drop', e => {
 urlLoadBtn.addEventListener('click', () => loadFromUrl(m3uUrlInput.value.trim()));
 m3uUrlInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadFromUrl(m3uUrlInput.value.trim()); });
 
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'm' || e.key === 'M') video.muted = !video.muted;
+  if (e.key === 'f' || e.key === 'F') {
+    if (!document.fullscreenElement) video.requestFullscreen();
+    else document.exitFullscreen();
+  }
+});
+
 async function loadFromUrl(url) {
   if (!url) return;
   urlLoadBtn.disabled = true;
@@ -570,9 +619,11 @@ function buildChannelList(channels) {
     (groups[g] = groups[g] || []).push({ ...ch, idx: i });
   });
 
+  let firstGroup = true;
   for (const [groupName, chs] of Object.entries(groups)) {
     const groupEl = document.createElement('div');
-    groupEl.className = 'group';
+    groupEl.className = firstGroup ? 'group' : 'group collapsed';
+    firstGroup = false;
     groupEl.dataset.group = groupName;
 
     const hdr = document.createElement('div');
@@ -686,17 +737,37 @@ async function playChannel(idx) {
     maxBufferLength: 10,
   });
 
+  let networkRecoveries = 0;
+  let mediaRecoveries   = 0;
+
   hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
     console.error('hls error', data);
-    if (data.fatal) {
-      setOverlay('error');
-      setStatus('error', 'Error');
-      errorMsg.textContent = `${data.details || data.type} — see console for details`;
+    if (!data.fatal) return;
+
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoveries < 5) {
+      networkRecoveries++;
+      setOverlay('loading');
+      setStatus('', `Reconnecting… (${networkRecoveries})`);
+      setTimeout(() => hlsPlayer && hlsPlayer.startLoad(), 1000);
+      return;
     }
+
+    if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 3) {
+      mediaRecoveries++;
+      hlsPlayer.recoverMediaError();
+      return;
+    }
+
+    setOverlay('error');
+    setStatus('error', 'Error');
+    errorMsg.textContent = `${data.details || data.type} — see console for details`;
   });
+
+  video.addEventListener('playing', () => { networkRecoveries = 0; mediaRecoveries = 0; }, { passive: true });
 
   video.onplaying = () => { video.muted = false; setOverlay('none'); setStatus('live', 'Live'); };
   video.onwaiting = () => setStatus('', 'Buffering…');
+  video.onpause   = () => { if (hlsPlayer) video.play().catch(() => {}); };
   video.onerror   = () => {
     setOverlay('error');
     setStatus('error', 'Error');
@@ -719,6 +790,7 @@ async function playChannel(idx) {
 function stopCurrent() {
   video.onplaying = null;
   video.onwaiting = null;
+  video.onpause   = null;
   video.onerror   = null;
   if (hlsPlayer) {
     try { hlsPlayer.stopLoad(); }    catch (_) {}
@@ -748,8 +820,25 @@ function esc(s) {
   );
 }
 
-// ── Heartbeat — lets server detect when browser closes ────
-setInterval(() => fetch('/api/ping', { method: 'POST' }).catch(() => {}), 5000);
+// ── Sidebar toggle ────────────────────────────────────────
+const sidebar        = document.getElementById('sidebar');
+const btnToggle      = document.getElementById('btn-toggle-sidebar');
+const btnSidebarShow = document.getElementById('btn-sidebar-show');
+
+btnToggle.addEventListener('click', () => {
+  sidebar.classList.add('hidden');
+  btnSidebarShow.style.display = 'block';
+});
+btnSidebarShow.addEventListener('click', () => {
+  sidebar.classList.remove('hidden');
+  btnSidebarShow.style.display = 'none';
+});
+
+// ── Heartbeat — only while a stream is active ────────────
+setInterval(() => { if (hlsPlayer) fetch('/api/ping', { method: 'POST' }).catch(() => {}); }, 5000);
+
+// ── Stop remux immediately on page unload ─────────────────
+window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/stop'));
 
 // ── Auto-load saved playlist on startup ───────────────────
 (async () => {
