@@ -211,6 +211,20 @@ body {
 }
 #btn-reload:hover { color: var(--text); border-color: var(--accent); }
 
+#btn-low-bw {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: .72rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+  white-space: nowrap;
+}
+#btn-low-bw:hover { color: var(--text); border-color: var(--accent); }
+#btn-low-bw.active { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
+
 #search {
   width: 100%;
   background: var(--surface);
@@ -458,6 +472,7 @@ body {
         <div class="wordmark" style="font-size:1rem">IPTV<em>Remux</em></div>
         <div style="display:flex;gap:6px">
           <button id="btn-toggle-sidebar" title="Hide sidebar">◀</button>
+          <button id="btn-low-bw" title="Low bandwidth mode: caps resolution/bitrate for weak connections (e.g. cellular)">Low BW</button>
           <button id="btn-reload">↑ Load new</button>
         </div>
       </div>
@@ -714,7 +729,7 @@ async function playChannel(idx) {
     const r = await fetch('/api/play', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: ch.url }),
+      body: JSON.stringify({ url: ch.url, quality: lowBandwidth ? 'mobile' : 'source' }),
     });
     if (!r.ok) throw new Error(await r.text());
   } catch (e) {
@@ -819,6 +834,23 @@ function esc(s) {
     ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
   );
 }
+
+// ── Low bandwidth mode ──────────────────────────────────────
+const btnLowBw = document.getElementById('btn-low-bw');
+let lowBandwidth = localStorage.getItem('lowBandwidth') === '1';
+
+function renderLowBwBtn() {
+  btnLowBw.classList.toggle('active', lowBandwidth);
+  btnLowBw.textContent = lowBandwidth ? 'Low BW: On' : 'Low BW';
+}
+renderLowBwBtn();
+
+btnLowBw.addEventListener('click', () => {
+  lowBandwidth = !lowBandwidth;
+  localStorage.setItem('lowBandwidth', lowBandwidth ? '1' : '0');
+  renderLowBwBtn();
+  if (activeIdx >= 0) playChannel(activeIdx); // restart current stream at new quality
+});
 
 // ── Sidebar toggle ────────────────────────────────────────
 const sidebar        = document.getElementById('sidebar');

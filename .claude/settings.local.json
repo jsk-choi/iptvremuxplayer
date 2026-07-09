@@ -12,7 +12,11 @@
       "PowerShell(cat \"C:\\\\Users\\\\jc\\\\Desktop\\\\wip\\\\iptvremuxplayer\\\\package-lock.json\" | node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const j=JSON.parse\\(d\\); console.log\\(JSON.stringify\\(Object.keys\\(j.packages\\).filter\\(k=>k.includes\\('ffmpeg'\\)\\)\\)\\)\")",
       "Bash(git rm *)",
       "Skill(run)",
-      "PowerShell(winget upgrade *)"
+      "PowerShell(winget upgrade *)",
+      "Bash(node --check server.js)",
+      "Bash(node -e ' *)",
+      "Bash(node --check /tmp/_check.js)",
+      "Bash(node --check 'C:\\\\Users\\\\jc\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-jc-Desktop-wip-iptvremuxplayer\\\\a644e8a0-8c61-4d46-8dcf-9a77ceb9b8b5\\\\scratchpad/_check.js')"
     ]
   }
 }

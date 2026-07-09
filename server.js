@@ -85,13 +85,30 @@ app.post('/api/parse', (req, res) => {
 });
 
 app.post('/api/play', (req, res) => {
-  const { url } = req.body;
+  const { url, quality } = req.body;
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   stopStream();
 
   const playlist = path.join(HLS_DIR, 'stream.m3u8');
   const segment  = path.join(HLS_DIR, 'seg%03d.ts');
+  const mobile   = quality === 'mobile';
+
+  // Mobile/low-bandwidth mode re-encodes to a capped bitrate + resolution instead
+  // of bitstream-copying the source, since IPTV feeds are often far above what a
+  // cellular link (esp. tunneled over a home VPN) can sustain.
+  const codecArgs = mobile
+    ? [
+        '-vf', 'scale=-2:720',
+        '-c:v', TRANSCODE_GPU ? 'h264_nvenc' : 'libx264',
+        ...(TRANSCODE_GPU ? ['-preset', 'p4'] : ['-preset', 'veryfast', '-tune', 'zerolatency']),
+        '-b:v', '1500k', '-maxrate', '2000k', '-bufsize', '3000k',
+        '-g', '48', '-force_key_frames', 'expr:gte(t,n_forced*2)',
+        '-c:a', 'aac', '-b:a', '96k', '-ac', '2',
+      ]
+    : TRANSCODE_GPU
+      ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-c:a', 'copy']
+      : ['-c', 'copy'];
 
   const args = [
     '-user_agent', 'VLC/3.0.20 LibVLC/3.0.20',
@@ -99,10 +116,10 @@ app.post('/api/play', (req, res) => {
     '-reconnect_streamed', '1',
     '-reconnect_at_eof', '1',
     '-reconnect_delay_max', '5',
-    ...(TRANSCODE_GPU ? ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'] : []),
+    ...(TRANSCODE_GPU && !mobile ? ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'] : []),
     '-fflags', '+genpts+discardcorrupt',
     '-i', url,
-    ...(TRANSCODE_GPU ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-c:a', 'copy'] : ['-c', 'copy']),
+    ...codecArgs,
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_flags', 'delete_segments+omit_endlist',

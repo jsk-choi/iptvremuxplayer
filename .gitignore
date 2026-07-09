@@ -1,5 +1,6 @@
 hls-temp/
 package-lock.json
+*.m3u
 
 # Logs
 logs
