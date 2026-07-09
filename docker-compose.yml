@@ -1,6 +1,7 @@
 services:
   iptvremuxplayer:
     build: .
+    container_name: iptvremuxplayer
     ports:
       - "3000:3000"
     volumes:
